@@ -4,7 +4,9 @@ import cv2
 import numpy as np
 import torch
 from ultralytics import YOLO
-
+import io
+import os
+import imageio
 # Load YOLOv5 model
 model= YOLO('./best.pt')  # Adjust file path if needed
 # Load YOLO model
@@ -32,37 +34,46 @@ def main():
     sample_rate = 10 
     st.title('PPE Detection')
 
-    uploaded_file = st.file_uploader("Choose an image or video...", type=["jpg", "jpeg", "png", "mp4", "avi", "mov"])
+    uploaded_file = st.sidebar.file_uploader("Choose an image or video...", type=["jpg", "jpeg", "png", "mp4", "avi", "mov"])
 
     if uploaded_file is not None:
+        
         if uploaded_file.type.startswith("video/"):
-            cap = cv2.VideoCapture(uploaded_file.name)
-            frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            fps = int(cap.get(cv2.CAP_PROP_FPS))
+            video_bytes = uploaded_file.read()
 
-            # Create an output video with the same dimensions and FPS
-            out = cv2.VideoWriter('output_video.mp4', cv2.VideoWriter_fourcc(*'avc1'), fps, (frame_width, frame_height))
+            video_np_array = np.frombuffer(video_bytes, dtype=np.uint8)
 
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break
+        # Save the video locally
+            video_path = "uploaded_video.mp4"
+            with open(video_path, "wb") as f:
+                f.write(video_bytes)
 
-    
+        # Create video writer using FFmpeg
+            output_video_path = "output_video.mp4"
+            video_writer = imageio.get_writer(output_video_path, fps=30)
 
-                #frame_counter += 1
-                #if frame_counter % sample_rate == 0:  # Process every nth frame
-                detected_frame = detect_objects(frame)
-                out.write(detected_frame)  # Write the processed frame to the output video
+        # Process each frame and write to the output video
+            with imageio.get_reader(video_path, 'ffmpeg') as video_reader:
+                for frame in video_reader:
+                # Perform operations on the frame if needed (replace this with your detection logic)
+                    detected_frame = detect_objects(frame)
 
-            cap.release()
-            out.release()
+                # Write the processed frame to the output video
+                    video_writer.append_data(detected_frame)
 
-            st.video('output_video.mp4')  # Display the output video in Streamlit
+        # Close the video writer
+            video_writer.close()
+
+        # Display the output video in Streamlit
+            st.video(output_video_path)
+
+        # Clean up: remove the local video file
+            os.remove(video_path)
 
         else:  # Image processing
-            image = cv2.imread(uploaded_file.name)
+            image_bytes = uploaded_file.read()
+            image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), -1)
+            #image = cv2.imread(uploaded_file.name)
             st.image(image, caption="Uploaded Image", use_column_width=True)
 
             detected_image = detect_objects(image)
